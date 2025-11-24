@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
@@ -129,9 +129,13 @@ namespace AgIO
             {
                 if (IPA.AddressFamily == AddressFamily.InterNetwork)
                 {
-                    listboxIP.Items.Add(IPA.ToString());
+                    listboxIP.Items.Add($"IPv4: {IPA}");
                 }
-            }
+                else if (IPA.AddressFamily == AddressFamily.InterNetworkV6)
+                {
+                    listboxIP.Items.Add($"IPv6: {IPA}");    
+                }    
+             } 
         }
 
         private void btnGetIP_Click(object sender, EventArgs e)
@@ -140,21 +144,40 @@ namespace AgIO
             try
             {
                 IPAddress[] addresslist = Dns.GetHostAddresses(actualIP);
-                if (addresslist != null)
+                if (addresslist != null && addresslist.Length > 0)
                 {
                     tboxCasterIP.Text = "";
-                    foreach (var addr in addresslist)
+                    IPAddress ipv4Address = null;
+                    IPAddress ipv6Address = null;
+                    
+                    foreach (IPAddress address in addresslist)
                     {
-                        if (addr.AddressFamily == AddressFamily.InterNetwork)
+                        if (address.AddressFamily == AddressFamily.InterNetwork)
                         {
-                            tboxCasterIP.Text = addr.ToString().Trim();
-                            mf.broadCasterIP = addr.ToString().Trim();
-                            Properties.Settings.Default.setNTRIP_casterIP = mf.broadCasterIP;
-                            Properties.Settings.Default.Save();
+                            ipv4Address = address;
                             break;
                         }
+                        else if (address.AddressFamily == AddressFamily.InterNetworkV6 && ipv6Address == null)
+                        {
+                            ipv6Address = address;  // 备选IPv6
+                        }
                     }
-                    mf.TimedMessageBox(2500, "IP Located", "Verified: " + actualIP);
+                    
+                    // 在循环外部解析IP地址
+                    string resolvedIP = (ipv4Address ?? ipv6Address)?.ToString().Trim();
+                    if (!string.IsNullOrEmpty(resolvedIP))
+                    {
+                        tboxCasterIP.Text = resolvedIP;
+                        mf.broadCasterIP = resolvedIP;
+                        Properties.Settings.Default.setNTRIP_casterIP = mf.broadCasterIP;
+                        Properties.Settings.Default.Save();
+                        mf.TimedMessageBox(2500, "IP Located", "Verified: " + actualIP);
+                    }
+                    else
+                    {
+                        mf.YesMessageBox("Can't Find: " + actualIP);
+                        Log.EventWriter("Can't Find Caster IP");
+                    }
                 }
                 else
                 {
@@ -172,33 +195,15 @@ namespace AgIO
         public Boolean CheckIPValid(String strIP)
         {
             // Return true for COM Port
-            if (strIP.Contains("COM"))
+            if (strIP.Contains("COM")) return true;
+        
+            // 支持IPv4和IPv6验证
+            if (IPAddress.TryParse(strIP, out IPAddress address))
             {
-                return true;
+                return address.AddressFamily == AddressFamily.InterNetwork ||
+                       address.AddressFamily == AddressFamily.InterNetworkV6;
             }
-
-            //  Split string by ".", check that array length is 3
-            string[] arrOctets = strIP.Split('.');
-
-            //at least 4 groups in the IP
-            if (arrOctets.Length != 4) return false;
-
-            //  Check each substring checking that the int value is less than 255 and that is char[] length is !> 2
-            const Int16 MAXVALUE = 255;
-            Int32 temp; // Parse returns Int32
-            foreach (String strOctet in arrOctets)
-            {
-                //check if at least 3 digits but not more OR 0 length
-                if (strOctet.Length > 3 || strOctet.Length == 0) return false;
-
-                //make sure all digits
-                if (!int.TryParse(strOctet, out int temp2)) return false;
-
-                //make sure not more then 255
-                temp = int.Parse(strOctet);
-                if (temp > MAXVALUE || temp < 0) return false;
-            }
-            return true;
+            return false;
         }
 
         private void tboxCasterIP_Validating(object sender, CancelEventArgs e)
@@ -285,17 +290,19 @@ namespace AgIO
         private void btnGetSourceTable_Click(object sender, EventArgs e)
         {
             btnGetSourceTable.Enabled = false;
-            IPAddress casterIP = IPAddress.Parse(tboxCasterIP.Text.Trim()); //Select correct Address
-            int casterPort = (int)nudCasterPort.Value; //Select correct port (usually 80)
+            IPAddress casterIP = IPAddress.Parse(tboxCasterIP.Text.Trim());
+            int casterPort = (int)nudCasterPort.Value;
 
             Socket sckt;
             dataList?.Clear();
 
             try
             {
-                sckt = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp)
+                AddressFamily family = casterIP.AddressFamily;
+                sckt = new Socket(family, SocketType.Stream, ProtocolType.Tcp)
                 {
-                    Blocking = true
+                    Blocking = true,
+                    DualMode = (family == AddressFamily.InterNetworkV6) // IPv6启用双栈
                 };
                 sckt.Connect(new IPEndPoint(casterIP, casterPort));
 
@@ -363,7 +370,6 @@ namespace AgIO
             }
 
             btnGetSourceTable.Enabled = true;
-
 
             // Console.WriteLine(page);
             // Process.Start(syte);
