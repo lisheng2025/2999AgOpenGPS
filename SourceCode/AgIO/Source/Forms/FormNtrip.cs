@@ -64,7 +64,7 @@ namespace AgIO
             tboxHostName.Text = hostName;
 
             //IPAddress[] ipaddress = Dns.GetHostAddresses(hostName);
-            GetIP4AddressList();
+            GetIPAddressList(); // ✅ 修改：方法名改为更准确的名称
 
             cboxToSerial.Checked = Properties.Settings.Default.setNTRIP_sendToSerial;
             cboxToUDP.Checked = Properties.Settings.Default.setNTRIP_sendToUDP;
@@ -120,27 +120,57 @@ namespace AgIO
             Program.Restart();
         }
 
-        //get the ipv4 address only
-        public void GetIP4AddressList()
+        // ✅ 修改：方法名改为更准确的名称，同时显示IPv4和IPv6地址
+        public void GetIPAddressList()
         {
             listboxIP.Items.Clear();
 
-            foreach (IPAddress IPA in Dns.GetHostAddresses(Dns.GetHostName()))
+            try
             {
-                if (IPA.AddressFamily == AddressFamily.InterNetwork)
+                foreach (IPAddress IPA in Dns.GetHostAddresses(Dns.GetHostName()))
                 {
-                    listboxIP.Items.Add($"IPv4: {IPA}");
+                    if (IPA.AddressFamily == AddressFamily.InterNetwork)
+                    {
+                        listboxIP.Items.Add($"IPv4: {IPA}");
+                    }
+                    else if (IPA.AddressFamily == AddressFamily.InterNetworkV6)
+                    {
+                        // 过滤掉IPv6链路本地和环回地址，只显示有意义的地址
+                        if (!IPA.IsIPv6LinkLocal && !IPA.IsIPv6SiteLocal && !IPAddress.IsLoopback(IPA))
+                        {
+                            listboxIP.Items.Add($"IPv6: {IPA}");
+                        }
+                    }
                 }
-                else if (IPA.AddressFamily == AddressFamily.InterNetworkV6)
+
+                // 如果没有找到任何地址，添加提示
+                if (listboxIP.Items.Count == 0)
                 {
-                    listboxIP.Items.Add($"IPv6: {IPA}");    
-                }    
-             } 
+                    listboxIP.Items.Add("No network addresses found");
+                }
+            }
+            catch (Exception ex)
+            {
+                listboxIP.Items.Add($"Error getting addresses: {ex.Message}");
+                Log.EventWriter($"Error in GetIPAddressList: {ex}");
+            }
         }
 
         private void btnGetIP_Click(object sender, EventArgs e)
         {
             string actualIP = tboxEnterURL.Text.Trim();
+            
+            // ✅ 改进：如果是直接输入的IP地址，直接使用
+            if (CheckIPValid(actualIP))
+            {
+                tboxCasterIP.Text = actualIP;
+                mf.broadCasterIP = actualIP;
+                Properties.Settings.Default.setNTRIP_casterIP = mf.broadCasterIP;
+                Properties.Settings.Default.Save();
+                mf.TimedMessageBox(2500, "IP Valid", "Using provided IP: " + actualIP);
+                return;
+            }
+
             try
             {
                 IPAddress[] addresslist = Dns.GetHostAddresses(actualIP);
@@ -155,11 +185,15 @@ namespace AgIO
                         if (address.AddressFamily == AddressFamily.InterNetwork)
                         {
                             ipv4Address = address;
-                            break;
+                            break; // 优先使用IPv4
                         }
                         else if (address.AddressFamily == AddressFamily.InterNetworkV6 && ipv6Address == null)
                         {
-                            ipv6Address = address;  // 备选IPv6
+                            // ✅ 改进：过滤掉IPv6特殊地址
+                            if (!address.IsIPv6LinkLocal && !address.IsIPv6SiteLocal && !IPAddress.IsLoopback(address))
+                            {
+                                ipv6Address = address;
+                            }
                         }
                     }
                     
@@ -171,24 +205,26 @@ namespace AgIO
                         mf.broadCasterIP = resolvedIP;
                         Properties.Settings.Default.setNTRIP_casterIP = mf.broadCasterIP;
                         Properties.Settings.Default.Save();
-                        mf.TimedMessageBox(2500, "IP Located", "Verified: " + actualIP);
+                        
+                        string addressType = (ipv4Address != null) ? "IPv4" : "IPv6";
+                        mf.TimedMessageBox(2500, "IP Located", $"Verified: {actualIP} ({addressType})");
                     }
                     else
                     {
-                        mf.YesMessageBox("Can't Find: " + actualIP);
-                        Log.EventWriter("Can't Find Caster IP");
+                        mf.YesMessageBox("Can't Find Valid IP for: " + actualIP);
+                        Log.EventWriter("Can't Find Valid Caster IP");
                     }
                 }
                 else
                 {
-                    mf.YesMessageBox("Can't Find: " + actualIP);
-                    Log.EventWriter("Can't Find Caster IP");
+                    mf.YesMessageBox("No IP Addresses Found for: " + actualIP);
+                    Log.EventWriter("No IP Addresses Found for Caster");
                 }
             }
             catch (Exception ex)
             {
-                mf.YesMessageBox("Can't Find: " + actualIP);
-                Log.EventWriter("Catch -> Can't Find Caster IP" + ex.ToString());
+                mf.YesMessageBox("DNS Resolution Failed for: " + actualIP);
+                Log.EventWriter($"DNS Resolution Failed for Caster IP: {ex.Message}");
             }
         }
 
@@ -197,9 +233,10 @@ namespace AgIO
             // Return true for COM Port
             if (strIP.Contains("COM")) return true;
         
-            // 支持IPv4和IPv6验证
+            // ✅ 改进：支持IPv4和IPv6验证
             if (IPAddress.TryParse(strIP, out IPAddress address))
             {
+                // 允许所有有效的IP地址类型
                 return address.AddressFamily == AddressFamily.InterNetwork ||
                        address.AddressFamily == AddressFamily.InterNetworkV6;
             }
@@ -290,7 +327,15 @@ namespace AgIO
         private void btnGetSourceTable_Click(object sender, EventArgs e)
         {
             btnGetSourceTable.Enabled = false;
-            IPAddress casterIP = IPAddress.Parse(tboxCasterIP.Text.Trim());
+            
+            // ✅ 改进：更好的IP地址解析和错误处理
+            if (!IPAddress.TryParse(tboxCasterIP.Text.Trim(), out IPAddress casterIP))
+            {
+                mf.TimedMessageBox(2000, "Invalid IP", "Please enter a valid IP address");
+                btnGetSourceTable.Enabled = true;
+                return;
+            }
+
             int casterPort = (int)nudCasterPort.Value;
 
             Socket sckt;
@@ -302,8 +347,16 @@ namespace AgIO
                 sckt = new Socket(family, SocketType.Stream, ProtocolType.Tcp)
                 {
                     Blocking = true,
-                    DualMode = (family == AddressFamily.InterNetworkV6) // IPv6启用双栈
+                    ReceiveTimeout = 5000, // ✅ 添加超时设置
+                    SendTimeout = 5000
                 };
+
+                // ✅ 改进：IPv6双栈模式设置
+                if (family == AddressFamily.InterNetworkV6)
+                {
+                    sckt.DualMode = true;
+                }
+
                 sckt.Connect(new IPEndPoint(casterIP, casterPort));
 
                 string msg = "GET / HTTP/1.0\r\n" + "User-Agent: NTRIP iter.dk\r\n" +
@@ -340,19 +393,21 @@ namespace AgIO
                         }
                     }
                 }
+
+                sckt.Close(); // ✅ 确保Socket被关闭
             }
             catch (SocketException ex)
             {
-                mf.TimedMessageBox(2000, "Socket Exception", "Invalid IP:Port");
+                mf.TimedMessageBox(2000, "Socket Exception", $"Invalid IP:Port - {ex.SocketErrorCode}");
                 btnGetSourceTable.Enabled = true;
-                Log.EventWriter("Catch -> Socket Exception, Invalid IP:Port" + ex.ToString());
+                Log.EventWriter($"Socket Exception, Invalid IP:Port - {ex}");
                 return;
             }
             catch (Exception ex)
             {
                 mf.TimedMessageBox(2000, "Exception", "Get Source Table Error");
                 btnGetSourceTable.Enabled = true;
-                Log.EventWriter("Catch - > Get Source Table Error" + ex.ToString());
+                Log.EventWriter($"Get Source Table Error: {ex}");
                 return;
             }
 
@@ -366,13 +421,10 @@ namespace AgIO
             }
             else
             {
-                mf.TimedMessageBox(2000, "Error", "No Source Data");
+                mf.TimedMessageBox(2000, "Error", "No Source Data Received");
             }
 
             btnGetSourceTable.Enabled = true;
-
-            // Console.WriteLine(page);
-            // Process.Start(syte);
         }
 
         private void NudCasterPort_Enter(object sender, EventArgs e)
