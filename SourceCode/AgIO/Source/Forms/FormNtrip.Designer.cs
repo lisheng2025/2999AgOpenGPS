@@ -1,4 +1,4 @@
-﻿namespace AgIO
+namespace AgIO
 {
     partial class FormNtrip
     {
@@ -100,9 +100,9 @@
             this.tboxCasterIP.Location = new System.Drawing.Point(91, 379);
             this.tboxCasterIP.Name = "tboxCasterIP";
             this.tboxCasterIP.ReadOnly = true;
-            this.tboxCasterIP.Size = new System.Drawing.Size(170, 33);
+            this.tboxCasterIP.Size = new System.Drawing.Size(250, 33);  // ✅ 修改：宽度增加到250以容纳IPv6地址
             this.tboxCasterIP.TabIndex = 79;
-            this.tboxCasterIP.Text = "192.168.188.255";
+            this.tboxCasterIP.Text = "::1";  // ✅ 修改：改为IPv6环回地址
             this.tboxCasterIP.TextAlign = System.Windows.Forms.HorizontalAlignment.Center;
             this.tboxCasterIP.Validating += new System.ComponentModel.CancelEventHandler(this.tboxCasterIP_Validating);
             // 
@@ -140,7 +140,7 @@
             this.label5.Name = "label5";
             this.label5.Size = new System.Drawing.Size(39, 25);
             this.label5.TabIndex = 82;
-            this.label5.Text = "IP:";
+            this.label5.Text = "地址:";  // ✅ 修改：从"IP"改为"地址"
             // 
             // label4
             // 
@@ -203,7 +203,7 @@
             this.label10.Name = "label10";
             this.label10.Size = new System.Drawing.Size(27, 23);
             this.label10.TabIndex = 76;
-            this.label10.Text = "IP";
+            this.label10.Text = "地址";  // ✅ 修改：从"IP"改为"地址"
             // 
             // tboxUserName
             // 
@@ -605,8 +605,8 @@
             this.tabPage1.Controls.Add(this.tboxUserName);
             this.tabPage1.Controls.Add(this.tboxMount);
             this.tabPage1.Controls.Add(this.label3);
-            this.tabPage1.Controls.Add(this.btnPassPassword);
             this.tabPage1.Controls.Add(this.label12);
+            this.tabPage1.Controls.Add(this.btnPassPassword);
             this.tabPage1.Controls.Add(this.btnPassUsername);
             this.tabPage1.Controls.Add(this.btnGetIP);
             this.tabPage1.Controls.Add(this.tboxCasterIP);
@@ -647,7 +647,7 @@
             // listboxIP
             // 
             this.listboxIP.BackColor = System.Drawing.Color.Gainsboro;
-            this.listboxIP.Enabled = false;
+            this.listboxIP.Enabled = true;
             this.listboxIP.Font = new System.Drawing.Font("Tahoma", 18F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.listboxIP.FormattingEnabled = true;
             this.listboxIP.ItemHeight = 29;
@@ -657,7 +657,7 @@
             "3"});
             this.listboxIP.Location = new System.Drawing.Point(91, 94);
             this.listboxIP.Name = "listboxIP";
-            this.listboxIP.Size = new System.Drawing.Size(221, 120);
+            this.listboxIP.Size = new System.Drawing.Size(221, 150);
             this.listboxIP.TabIndex = 144;
             // 
             // tabPage2
